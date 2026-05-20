@@ -115,6 +115,8 @@ def main(N=1000000):
     
     print(f"Hedge Delta ENEL: Buy {enel_NoF:.6f} shares per {N} EUR notional")
     print(f"Hedge Delta AXA:  Buy {axa_NoF:.6f} shares per {N} EUR notional")
-    print(f"Hedge IR Risk:    Enter a Payer IRS (receive 3m Euribor, pay fixed) with Notional = {swap_notional:.4f} EUR per {N} EUR notional")
-
+    if dv01_upfront > 0:
+            print(f"Hedge IR Risk:    Enter a Receiver IRS (pay 3m Euribor, receive fixed) with Notional = {swap_notional:.4f} EUR per {N} EUR notional")
+    else:
+        print(f"Hedge IR Risk:    Enter a Payer IRS (receive 3m Euribor, pay fixed) with Notional = {swap_notional:.4f} EUR per {N} EUR notional")
 if __name__ == "__main__":    main(N = 1000000)
