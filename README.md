@@ -150,7 +150,7 @@ $$\mathbf{Z}_j \sim \mathcal{N}\!\left(\mathbf{0},\,\Sigma\right), \qquad \Sigma
 | Strike | $K^{(k)}$ | 100 | 200 |
 | Implied volatility | $\sigma_k$ | 16.2% | 20.0% |
 | Continuous dividend yield | $q_k$ | 2.5% | 2.9% |
-| Correlation | $\rho$ | \multicolumn{2}{c}{0.40} |
+| Correlation | $\rho$ | 40% | 40% |
 
 ---
 
@@ -399,4 +399,4 @@ Hedge IR Risk: Enter a Payer IRS with Notional = ... EUR
 
 ---
 
-*Course: Advanced Mathematical Models in Finance — Lorenzo Mariani, 2023.*
+*Course: Advanced Mathematical Models in Finance — 2026.*
