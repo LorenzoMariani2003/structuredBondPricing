@@ -24,11 +24,13 @@ def simulate_paths_and_coupon(r, D_0_4, S0_enel=100.0, S0_axa=200.0,
         
     # Final Payoff calculation at maturity (t=16)
     
-    avg_price_enel = np.mean(prices[0, 1:, :], axis=0)
-    avg_price_axa = np.mean(prices[1, 1:, :], axis=0)
-    
-    basket_return = 0.5 * (avg_price_enel / strike_enel - 1) + 0.5 * (avg_price_axa / strike_axa - 1)
 
+    ratios_enel = prices[0, 1:, :] / prices[0, :-1, :]
+    ratios_axa  = prices[1, 1:, :] / prices[1, :-1, :]
+
+    basket_return = 0.5 * (np.mean(ratios_enel, axis=0) - 1) + 0.5 * (np.mean(ratios_axa, axis=0) - 1)
+
+    
     expected_coupon = alpha * np.mean(np.maximum(0, basket_return))
     
     discounted_coupon = expected_coupon * D_0_4

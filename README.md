@@ -156,19 +156,23 @@ $$\mathbf{Z}_j \sim \mathcal{N}\!\left(\mathbf{0},\,\Sigma\right), \qquad \Sigma
 
 ### 2.4 Basket Coupon Payoff
 
-The basket return at maturity $T$ is an **equally-weighted arithmetic average** of the two individual stock returns measured from their strikes:
+The termsheet defines $S(T)$ as an **equally-weighted average of sequential period returns** across all monitoring dates:
 
-$$R_{\text{basket}}(T) = \frac{1}{2}\left(\frac{S^{(\text{Enel})}_T}{K^{(\text{Enel})}} - 1\right) + \frac{1}{2}\left(\frac{S^{(\text{Axa})}_T}{K^{(\text{Axa})}} - 1\right)$$
+$$S(T) = \frac{1}{d}\sum_{s=1}^{d} \left[\frac{1}{N_{\text{obs}}}\sum_{n=1}^{N_{\text{obs}}} \frac{E_s(t_n)}{E_s(t_{n-1})}\right]$$
 
-The coupon paid at $T$ (normalised to 1 unit of notional) is:
+where $d = 2$ (Enel, Axa), $N_{\text{obs}} = 16$ quarterly monitoring dates, and each ratio $E_s(t_n)/E_s(t_{n-1})$ is the gross return of stock $s$ over the $n$-th period. The basket return is therefore:
+
+$$R_{\text{basket}}(T) = S(T) - 1 = \frac{1}{2}\left(\frac{1}{16}\sum_{n=1}^{16}\frac{S^{(\text{Enel})}_{t_n}}{S^{(\text{Enel})}_{t_{n-1}}} - 1\right) + \frac{1}{2}\left(\frac{1}{16}\sum_{n=1}^{16}\frac{S^{(\text{Axa})}_{t_n}}{S^{(\text{Axa})}_{t_{n-1}}} - 1\right)$$
+
+This is an **Asian structure on period returns** (not a terminal price divided by a fixed strike). The coupon paid at $T$ (normalised to 1 unit of notional) is:
 
 $$C(T) = \alpha \cdot \max\!\left(0,\, R_{\text{basket}}(T)\right), \qquad \alpha = 0.95$$
 
-This is a **European call on a basket** struck at zero with a sub-unity participation rate. Its risk-neutral present value is estimated via Monte Carlo:
+Its risk-neutral present value is estimated via Monte Carlo:
 
-$$PV_{\text{Coupon}} = B(0,T) \cdot \frac{\alpha}{N}\sum_{n=1}^{N} \max\!\left(0,\, R_{\text{basket}}^{(n)}(T)\right)$$
+$$PV_{\text{Coupon}} = B(0,T) \cdot \frac{\alpha}{N_{\text{sim}}}\sum_{i=1}^{N_{\text{sim}}} \max\!\left(0,\, R_{\text{basket}}^{(i)}(T)\right)$$
 
-where $N$ is the number of simulated paths (default: $N = 100{,}000$).
+where $N_{\text{sim}}$ is the number of simulated paths (default: $N_{\text{sim}} = 100{,}000$).
 
 ---
 
@@ -257,7 +261,7 @@ flowchart TD
         subgraph MC["🎲 Monte Carlo  (N = 100 000 paths)"]
             K["Draw correlated normals\n(Z_Enel, Z_Axa) ~ N(0, Σ) at each quarter"]
             K --> L["Simulate GBM paths step-by-step\nSₜ₊₁ = Sₜ · exp[(r−q−σ²/2)Δt + σ√Δt·Z]"]
-            L --> M["Compute basket return at T\nR = ½(S_Enel/K_Enel−1) + ½(S_Axa/K_Axa−1)"]
+            L --> M["Compute basket return at T\nR = ½·mean(Sₙ/Sₙ₋₁)_Enel + ½·mean(Sₙ/Sₙ₋₁)_Axa − 1"]
             M --> N["PV_Coupon = B(0,T) · α · E[max(0,R)]"]
         end
 
@@ -334,7 +338,6 @@ simulate_paths_and_coupon(
     rho=0.40,       # Enel–Axa return correlation
     dt=0.25,        # quarterly step
     n_steps=16,     # 4 years × 4 quarters
-    strike_enel=100.0, strike_axa=200.0,
     alpha=0.95,     # participation rate
     N_sim=10000     # number of Monte Carlo paths
 ) -> (discounted_coupon: float, prices: np.ndarray)
