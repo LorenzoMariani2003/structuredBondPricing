@@ -11,10 +11,12 @@ def simulate_paths_and_coupon(r, D_0_4, S0_enel=100.0, S0_axa=200.0,
 
     Basket return follows the termsheet definition:
         S(T) = (1/d) * sum_s [ (1/N) * sum_n  E_s(t_n) / E_s(t_{n-1}) ]
-    where the N=4 monitoring dates are t1=1y, t2=2y, t3=3y, t4=4y=T.
+    where the N=4 monitoring dates are t1=1y, t2=2y, t3=3y, t4=4y=T. 
 
     Since each ratio E_s(t_n)/E_s(t_{n-1}) is independent of S0,
-    the equity delta of the coupon is exactly zero by construction.
+    the equity delta of the coupon is exactly zero by construction 
+    
+    #tom ? non mi sembra giusto
 
     Returns
     -------

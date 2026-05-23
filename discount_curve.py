@@ -109,19 +109,19 @@ def getContinousInterestRate(D,T):
 
 
 
-#print("Calculating discount curve...")
-#discount_curve_schedule = calculate_curve()
-#print("Discount curve calculated successfully.")
-#print("Interest rates at payment dates:")
-#for date, discount in discount_curve_schedule.items():
-#    rate = getContinousInterestRate(discount, T=yearfrac(discount_curve_schedule.index[0], date, DC_CONV["INTERP"]))
-#    print(f"Date: {date.date()}, Discount Factor: {discount:.6f}, Continuous Rate: {rate:.6%}") 
-#
-#plt.figure(figsize=(10, 5))
-#plt.plot(discount_curve_schedule.index[:15], discount_curve_schedule.values[:15], marker="o", linestyle="-")
-#plt.title("Discount Curve")
-#plt.xlabel("Date")
-#plt.ylabel("Discount Factor")
-#plt.grid(True)
-#plt.tight_layout()
-#plt.savefig("discount_curve.png")
+print("Calculating discount curve...")
+discount_curve_schedule = calculate_curve()
+print("Discount curve calculated successfully.")
+print("Interest rates at payment dates:")
+for date, discount in discount_curve_schedule.items():
+    rate = getContinousInterestRate(discount, T=yearfrac(discount_curve_schedule.index[0], date, DC_CONV["INTERP"]))
+    print(f"Date: {date.date()}, Discount Factor: {discount:.6f}, Continuous Rate: {rate:.6%}") 
+
+plt.figure(figsize=(10, 5))
+plt.plot(discount_curve_schedule.index[:15], discount_curve_schedule.values[:15], marker="o", linestyle="-")
+plt.title("Discount Curve")
+plt.xlabel("Date")
+plt.ylabel("Discount Factor")
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("discount_curve.png")

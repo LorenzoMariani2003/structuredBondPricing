@@ -18,7 +18,7 @@ def main(N=1000000):
     last_date = discount_curve_schedule.index[-1]
     
     # Get continuous interest rate for T=4 years using the last discount factor
-    r_4y = -np.log(D_0_4) / 4.0
+    r_4y = -np.log(D_0_4) / 4.0 #todo fix with continous vector instead of fixed value
     
     print(f"\nLast date in discount curve: {last_date.date()}")
     print(f"Continuous interest rate for T=4 years: {r_4y:.6%}")
@@ -31,9 +31,9 @@ def main(N=1000000):
     
     # Spread component (spread * dt * sum of discount factors)
     spread = 0.03
-    dt = 0.25
+    dt = 0.25 #todo compute actual dates
     sum_dfs = discount_curve_schedule.sum()
-    pv_spread = sum_dfs * spread * dt
+    pv_spread = sum_dfs * spread * dt 
     
     # Coupon component (Monte Carlo simulation)
 
