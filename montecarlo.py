@@ -2,10 +2,10 @@ import numpy as np
 
 BDAYS_YEAR = 256  # business days per year (consistent with Utilities.py)
 
-def simulate_paths_and_coupon(r, D_0_4, S0_enel=100.0, S0_axa=200.0,
+def simulate_paths_and_coupon(r_vec, D_0_4, S0_enel=100.0, S0_axa=200.0,
                               vol_enel=0.162, vol_axa=0.200,
                               div_enel=0.025, div_axa=0.029,
-                              rho=0.40, n_monitoring=4, alpha=0.95, N_sim=10000):
+                              rho=0.40, n_monitoring=4, alpha=0.95, N_sim=10000, seed=None):
     """
     Daily GBM simulation (256 business days/year) with N=4 annual monitoring dates.
 
@@ -25,9 +25,13 @@ def simulate_paths_and_coupon(r, D_0_4, S0_enel=100.0, S0_axa=200.0,
     monitor_prices : np.ndarray, shape (2, n_monitoring+1, N_sim)
         Prices at t0 and at each of the 4 annual monitoring dates.
     """
+    if seed is not None:
+        np.random.seed(seed)
+
 
     dt = 1.0 / BDAYS_YEAR          # one business day
     steps_per_year = BDAYS_YEAR
+    steps_per_quarter= BDAYS_YEAR // 4
     total_steps = n_monitoring * steps_per_year   # 4 * 256 = 1024
 
     corr_matrix = np.array([[1.0, rho],
@@ -43,6 +47,8 @@ def simulate_paths_and_coupon(r, D_0_4, S0_enel=100.0, S0_axa=200.0,
                   np.full(N_sim, S0_axa)], dtype=float)
 
     for step in range(1, total_steps + 1):
+        quarter_id = min((step - 1) // steps_per_quarter, len(r_vec) - 1)
+        r = r_vec[quarter_id]
         Z = np.random.multivariate_normal([0.0, 0.0], corr_matrix, N_sim).T
 
         S[0] *= np.exp((r - div_enel - 0.5 * vol_enel**2) * dt
@@ -69,7 +75,8 @@ def simulate_paths_and_coupon(r, D_0_4, S0_enel=100.0, S0_axa=200.0,
 
     return discounted_coupon, monitor_prices
 import matplotlib.pyplot as plt
-prices = simulate_paths_and_coupon(r=0.02, D_0_4=0.95)[1]
+r_test = np.full(16, 0.02)
+prices = simulate_paths_and_coupon(r_vec=r_test, D_0_4=0.95, N_sim=100)[1]
 prices_enel = prices[0, :, :]
 prices_axa = prices[1, :, :]
 

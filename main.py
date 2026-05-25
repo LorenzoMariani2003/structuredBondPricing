@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from discount_curve import calculate_curve, getContinousInterestRate
 from montecarlo import simulate_paths_and_coupon
 
+from FinDates.daycount import yearfrac #todo check implementation of this yearfrac, I assumed them to be correct _tom
 
 def main(N=1000000):        
     print("--------------------------------Question 1--------------------------------")
@@ -18,10 +19,13 @@ def main(N=1000000):
     last_date = discount_curve_schedule.index[-1]
     
     # Get continuous interest rate for T=4 years using the last discount factor
-    r_4y = -np.log(D_0_4) / 4.0 #todo fix with continous vector instead of fixed value
-    
+    #r_4y = -np.log(D_0_4) / 4.0 #todo fix with continous vector instead of fixed value
+        
+    seed=12
+
+
     print(f"\nLast date in discount curve: {last_date.date()}")
-    print(f"Continuous interest rate for T=4 years: {r_4y:.6%}")
+    #print(f"Continuous interest rate for T=4 years: {r_4y:.6%}")
     print(f"Discount factor for T=4 years: {D_0_4:.6f}")
     
     # All three components of the pricing formula:
@@ -31,14 +35,35 @@ def main(N=1000000):
     
     # Spread component (spread * dt * sum of discount factors)
     spread = 0.03
-    dt = 0.25 #todo compute actual dates
-    sum_dfs = discount_curve_schedule.sum()
-    pv_spread = sum_dfs * spread * dt 
+#    dt = 0.25 #todo compute actual dates
+
+
+    dates = discount_curve_schedule.index
+    dts = [yearfrac(dates[i-1],dates[i], "ACT/360") for i in range (1,len(dates))]
+
+    dtSettle = pd.Timestamp("2023-02-02")
+    dt_first = yearfrac(dtSettle, dates[0], "ACT/360")
+    dts = [dt_first] + dts  # ora dts ha 16 elementi come discount_curve_schedule
+
+    pv_spread = spread * sum(df * dt for df, dt in zip(discount_curve_schedule.values, dts))
+    
+
+    D_vals = discount_curve_schedule.values  # considering 16 discount factors
+    D_prev = np.concatenate([[1.0], D_vals[:-1]]) #todo not uqite sure on the 1 considering the contract starts 2 days after the stipulated date
+
+    dts_years = np.array(dts)
+
+    r_forward_quarterly = -np.log(D_vals / D_prev) / dts_years  
+
+
+
     
     # Coupon component (Monte Carlo simulation)
 
-    pv_coupon, _ = simulate_paths_and_coupon(r=r_4y, D_0_4=D_0_4, N_sim=100000) 
+    pv_coupon, _ = simulate_paths_and_coupon(r_vec=r_forward_quarterly, D_0_4=D_0_4, N_sim=100000, seed=seed) 
     
+
+
     # Final equaation 
     Upfront_X = pv_euribor + pv_spread - pv_coupon
     
@@ -49,13 +74,13 @@ def main(N=1000000):
     print(f"Upfront X%: {Upfront_X:.4f} ({Upfront_X * 100:.2f}%)")
 
     print("--------------------------------Question 2--------------------------------")
-    pv_coupon_benel, _ = simulate_paths_and_coupon(r=r_4y, D_0_4=D_0_4,S0_enel=101, N_sim=100000) 
+    pv_coupon_benel, _ = simulate_paths_and_coupon(r_vec=r_forward_quarterly, D_0_4=D_0_4,S0_enel=101, N_sim=100000,seed=seed) 
     
     # Final equaation for Bumped enel
     Upfront_X_benel = pv_euribor + pv_spread - pv_coupon_benel
 
 
-    pv_coupon_baxa, _ = simulate_paths_and_coupon(r=r_4y, D_0_4=D_0_4,S0_axa=201, N_sim=100000) 
+    pv_coupon_baxa, _ = simulate_paths_and_coupon(r_vec=r_forward_quarterly, D_0_4=D_0_4,S0_axa=201, N_sim=100000, seed=seed) 
     
     # Final equaation for Bumped enel
     Upfront_X_baxa = pv_euribor + pv_spread - pv_coupon_baxa
@@ -69,38 +94,42 @@ def main(N=1000000):
     print(f"Delta Upfront X% for Axa (S0=201): {delta_axa:.4f} ({delta_axa * 100:.2f}%)")
 
 
-    bumped_discounts = []
-    T_values = np.arange(0.25, 4.25, 0.25)
-    for discount, T in zip(discount_curve_schedule.values, T_values):
-        r_bumped = -np.log(discount) / T + 0.0001  
-        D_bumped = np.exp(-r_bumped * T)  
-        bumped_discounts.append(D_bumped)
+    T_values = np.array([yearfrac(dtSettle, d, "ACT/365 FIXED") for d in dates]) #365 for interpolation purposes
+
+
+    bumped_discounts = np.array([
+    np.exp(-(-np.log(D) / T + 0.0001) * T)
+    for D, T in zip(D_vals, T_values)])
         
-    D_0_4_bumped = bumped_discounts[-1]  # Use the last bumped discount factor for T=4 years
-    r_4y_bumped = -np.log(D_0_4_bumped) / 4.0
+    D_0_4_bumped = bumped_discounts[-1]
+
+    D_prev_bumped = np.concatenate([[1.0], bumped_discounts[:-1]])
+
+    r_forward_quarterly_bumped = -np.log(bumped_discounts / D_prev_bumped) / dts_years
+
 
     # Euribor component (1 - D_0_4)
     pv_euribor_bumped = 1.0 - D_0_4_bumped
     
     # Spread component (spread * dt * sum of discount factors)
     spread = 0.03
-    dt = 0.25
-    sum_dfs_bumped = sum(bumped_discounts)
-    pv_spread_bumped = sum_dfs_bumped * spread * dt
+    pv_spread_bumped  = spread * sum(df * dt for df, dt in zip(bumped_discounts, dts))
+
     
     # Coupon component (Monte Carlo simulation)
 
-    pv_coupon_bumped, _ = simulate_paths_and_coupon(r=r_4y_bumped, D_0_4=D_0_4_bumped, N_sim=100000) 
+    pv_coupon_bumped, _ = simulate_paths_and_coupon(r_vec=r_forward_quarterly_bumped, D_0_4=D_0_4_bumped, N_sim=100000, seed=seed) 
     
     # Final equaation 
     Upfront_X_bumped = pv_euribor_bumped + pv_spread_bumped - pv_coupon_bumped
-    
+    dv01 = Upfront_X_bumped - Upfront_X
+
     print("\n--- PRICING ---")
     print(f"PV Euribor bumped: {pv_euribor_bumped:.4f}")
     print(f"PV Spread bumped:  {pv_spread_bumped:.4f}")
     print(f"PV Coupon bumped:  {pv_coupon_bumped:.4f}")
     print(f"Upfront bumped X%: {Upfront_X_bumped:.4f} ({Upfront_X_bumped * 100:.2f}%)")
-    print(f"Delta Upfront X% for 1bp bump: {Upfront_X_bumped - Upfront_X:.6f} ({(Upfront_X_bumped - Upfront_X) * 100:.2f}%)")
+    print(f"Delta Upfront X% for 1bp bump: {dv01:.6f} ({(Upfront_X_bumped - Upfront_X) * 100:.2f}%)")
 
 
     print("\n--------------------------------Question 3--------------------------------")
@@ -110,7 +139,8 @@ def main(N=1000000):
     axa_NoF = abs(delta_axa)*N
     dv01_upfront = (Upfront_X_bumped - Upfront_X)
 
-    dv01_swap_1eur = sum_dfs * 0.0001 * dt
+    dv01_swap_1eur = sum(df * dt for df, dt in zip(discount_curve_schedule.values, dts))  * 0.0001
+
     swap_notional = N*abs(dv01_upfront) / dv01_swap_1eur
     
     print(f"Hedge Delta ENEL: Buy {enel_NoF:.6f} shares per {N} EUR notional")
