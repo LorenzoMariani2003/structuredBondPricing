@@ -2,6 +2,21 @@ import numpy as np
 
 BDAYS_YEAR = 256  # business days per year (consistent with Utilities.py)
 
+
+def calculate_asian_basket_coupon(monitor_prices, alpha, D_0_4):
+    # Basket return = equally-weighted mean of ratios minus 1
+    ratios_enel = monitor_prices[0, 1:, :] / monitor_prices[0, :-1, :]
+    ratios_axa  = monitor_prices[1, 1:, :] / monitor_prices[1, :-1, :]
+
+    basket_return = (0.5 * np.mean(ratios_enel, axis=0)
+                   + 0.5 * np.mean(ratios_axa,  axis=0)
+                   - 1.0)
+
+    expected_coupon   = alpha * np.mean(np.maximum(0.0, basket_return))
+    discounted_coupon = expected_coupon * D_0_4
+
+    return discounted_coupon
+
 def simulate_paths_and_coupon(r_vec, D_0_4, S0_enel=100.0, S0_axa=200.0,
                               vol_enel=0.162, vol_axa=0.200,
                               div_enel=0.025, div_axa=0.029,
@@ -61,17 +76,7 @@ def simulate_paths_and_coupon(r_vec, D_0_4, S0_enel=100.0, S0_axa=200.0,
             monitor_prices[0, m, :] = S[0]
             monitor_prices[1, m, :] = S[1]
 
-    # Sequential annual ratios: E_s(t_n) / E_s(t_{n-1}), shape (2, 4, N_sim)
-    ratios_enel = monitor_prices[0, 1:, :] / monitor_prices[0, :-1, :]
-    ratios_axa  = monitor_prices[1, 1:, :] / monitor_prices[1, :-1, :]
-
-    # Basket return = equally-weighted mean of ratios minus 1
-    basket_return = (0.5 * np.mean(ratios_enel, axis=0)
-                   + 0.5 * np.mean(ratios_axa,  axis=0)
-                   - 1.0)
-
-    expected_coupon   = alpha * np.mean(np.maximum(0.0, basket_return))
-    discounted_coupon = expected_coupon * D_0_4
+    discounted_coupon = calculate_asian_basket_coupon(monitor_prices, alpha, D_0_4)
 
     return discounted_coupon, monitor_prices
 import matplotlib.pyplot as plt
