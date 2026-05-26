@@ -149,4 +149,10 @@ def main(N=1000000):
             print(f"Hedge IR Risk:    Enter a Receiver IRS (pay 3m Euribor, receive fixed) with Notional = {swap_notional:.4f} EUR per {N} EUR notional")
     else:
         print(f"Hedge IR Risk:    Enter a Payer IRS (receive 3m Euribor, pay fixed) with Notional = {swap_notional:.4f} EUR per {N} EUR notional")
+
+
+    print("\n--------------------------------Closed formula check--------------------------------")
+    pv_coupon_closed_form, _ = simulate_paths_and_coupon(r_vec=r_forward_quarterly, D_0_4=D_0_4, N_sim=100000, seed=seed, benchmark=True) 
+    print(f"PV Coupon (Monte Carlo): {pv_coupon:.4f}")
+    print(f"PV Coupon (Closed-form): {pv_coupon_closed_form:.4f}")
 if __name__ == "__main__":    main(N = 1000000)
