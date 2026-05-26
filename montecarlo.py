@@ -1,11 +1,24 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.stats import norm
 
 BDAYS_YEAR = 256
 
 
+# ---------------------------------------------------------------------------
+# Payoff helpers
+# ---------------------------------------------------------------------------
+
 def calculate_asian_basket_coupon(monitor_prices, alpha, D_0_4):
-    """Arithmetic Asian basket coupon from MC paths."""
+    """
+    Arithmetic Asian basket coupon from MC paths.
+
+    Basket return:
+        B = 0.5 * mean_n(E_enel(t_n)/E_enel(t_{n-1}))
+          + 0.5 * mean_n(E_axa(t_n) /E_axa(t_{n-1}))
+          - 1
+    Coupon PV = alpha * E[max(0, B)] * D(0, T)
+    """
     ratios_enel = monitor_prices[0, 1:, :] / monitor_prices[0, :-1, :]
     ratios_axa  = monitor_prices[1, 1:, :] / monitor_prices[1, :-1, :]
 
@@ -13,100 +26,268 @@ def calculate_asian_basket_coupon(monitor_prices, alpha, D_0_4):
                    + 0.5 * np.mean(ratios_axa,  axis=0)
                    - 1.0)
 
-    expected_coupon   = alpha * np.mean(np.maximum(0.0, basket_return))
+    expected_coupon = alpha * np.mean(np.maximum(0.0, basket_return))
     return expected_coupon * D_0_4
 
+
+def calculate_geometric_basket_coupon_mc(monitor_prices, alpha, D_0_4):
+    """
+    Geometric basket coupon priced from the same MC paths.
+
+    Replace the arithmetic mean of annual ratios with the geometric mean:
+        G_s = (prod_n E_s(t_n)/E_s(t_{n-1}))^(1/N) = (E_s(T)/E_s(0))^(1/N)
+        G   = sqrt(G_enel * G_axa)   (equal-weight geometric basket)
+
+    Coupon PV = alpha * E[max(0, G - 1)] * D(0, T)
+
+    Because G is lognormal under Q, this MC estimate can be directly compared
+    against the closed-form price in geometric_basket_closed_form -- providing
+    a self-consistent validation of the simulation engine using the very same
+    paths generated for the actual product.
+    """
+    n = monitor_prices.shape[1] - 1          # number of monitoring dates (4)
+
+    geom_enel = (monitor_prices[0, -1, :] / monitor_prices[0, 0, :]) ** (1.0 / n)
+    geom_axa  = (monitor_prices[1, -1, :] / monitor_prices[1, 0, :]) ** (1.0 / n)
+
+    basket_return = np.sqrt(geom_enel * geom_axa) - 1.0
+
+    expected_coupon = alpha * np.mean(np.maximum(0.0, basket_return))
+    return expected_coupon * D_0_4
+
+
+# ---------------------------------------------------------------------------
+# Closed-form reference
+# ---------------------------------------------------------------------------
 
 def geometric_basket_closed_form(r_vec, D_0_4, alpha=0.95,
                                   vol_enel=0.162, vol_axa=0.200,
                                   div_enel=0.025, div_axa=0.029,
                                   rho=0.40, n_monitoring=4):
     """
-    Closed-form lower bound via geometric basket approximation.
+    Closed-form price for the geometric basket coupon.
 
-    Replace arithmetic mean of annual ratios with geometric mean:
-        G = (E_enel(T)/E_enel(0))^(1/8) * (E_axa(T)/E_axa(0))^(1/8)
+    Under Q, each annual ratio E_s(t_n)/E_s(t_{n-1}) is lognormal with:
+        log-drift : f_n - d_s - 0.5*sigma_s^2
+        log-vol   : sigma_s * sqrt(1 year)
 
-    G is lognormal under Q since it is a product of lognormals.
-    Arithmetic >= Geometric (Jensen) => this is a LOWER BOUND on the MC price.
+    The geometric mean G_s = (prod_n ratio_n)^(1/N) is also lognormal:
+        ln G_s ~ N(mu_s, sigma_s^2/N)  where mu_s = (1/N)*sum_n(f_n - d_s - 0.5*sigma_s^2)
 
-    Annual forward rate for year n:
-        f_n = sum of quarterly rates in that year * dt_q  (continuous compounding)
+    The geometric basket G = sqrt(G_enel * G_axa) is lognormal:
+        mu_G    = 0.5*(mu_enel + mu_axa)
+        sigma_G = sqrt((vol_enel^2 + vol_axa^2 + 2*rho*vol_enel*vol_axa) / (4*N))
+
+    E[max(0, G-1)] is priced by the Black-Scholes formula with K=1, F=E[G].
+
+    Jensen inequality => arithmetic basket >= geometric basket, so this price
+    is a LOWER BOUND on the arithmetic Asian basket MC price.
     """
     dt_q = 0.25
-    # Annual forward log-drifts: f_n = integral of r(t) dt over year n
     f_annual = [float(np.sum(r_vec[4*n : 4*(n+1)]) * dt_q) for n in range(n_monitoring)]
 
-    # E[ln G_s] for each stock: (1/4) * sum_n (f_n - d_s - 0.5*sigma_s^2)
-    mu_e = sum(f - div_enel - 0.5*vol_enel**2 for f in f_annual) / 4
-    mu_a = sum(f - div_axa  - 0.5*vol_axa**2  for f in f_annual) / 4
+    mu_e = sum(f - div_enel - 0.5 * vol_enel**2 for f in f_annual) / n_monitoring
+    mu_a = sum(f - div_axa  - 0.5 * vol_axa**2  for f in f_annual) / n_monitoring
 
-    # Geometric basket G = (G_enel * G_axa)^(1/2)
-    # ln G ~ N(mu_G, sigma_G^2)
     mu_G    = 0.5 * (mu_e + mu_a)
-    sigma_G = np.sqrt((vol_enel**2 + vol_axa**2 + 2*rho*vol_enel*vol_axa) / 16)
+    sigma_G = np.sqrt((vol_enel**2 + vol_axa**2 + 2 * rho * vol_enel * vol_axa)
+                      / (4 * n_monitoring))
 
-    # E[max(0, G - 1)] — Black-Scholes formula for lognormal with strike K=1
-    F  = np.exp(mu_G + 0.5 * sigma_G**2)   # E[G]
-    d1 = (mu_G + sigma_G**2) / sigma_G      # ln(K)=0 since K=1
+    F  = np.exp(mu_G + 0.5 * sigma_G**2)
+    d1 = (mu_G + sigma_G**2) / sigma_G
     d2 = mu_G / sigma_G
 
     coupon = alpha * (F * norm.cdf(d1) - norm.cdf(d2))
     return coupon * D_0_4
 
 
-def _benchmark_european_call(S=100.0, K=100.0, T=1.0, r=0.05, vol=0.20,
-                              div=0.0, N_sim=1_000_000, seed=None):
+# ---------------------------------------------------------------------------
+# Fast terminal sampler  (convergence analysis only)
+# ---------------------------------------------------------------------------
+
+def _simulate_geometric_basket_fast(r_vec, D_0_4, alpha,
+                                     vol_enel, vol_axa, div_enel, div_axa,
+                                     rho, n_monitoring, N_sim, seed=None):
     """
-    Validates the MC engine against Black-Scholes for a plain European call.
-    Since this has an exact formula, MC and analytical should match to ~2-3bp.
-    This is NOT the product we are pricing — it is a sanity check only.
+    Fast geometric basket pricer via direct terminal sampling.
+
+    G_s = (E_s(T)/E_s(0))^(1/N) is lognormal under Q, so we sample
+    ln(E_s(T)/E_s(0)) directly without daily time-stepping -- valid because
+    the geometric basket payoff depends only on terminal prices, not the path.
+
+    Returns
+    -------
+    price : float
+        Discounted geometric basket coupon estimate.
+    stderr : float
+        MC standard error (1-sigma) of the estimate.
     """
     if seed is not None:
         np.random.seed(seed)
 
-    # --- Analytical Black-Scholes ---
-    d1 = (np.log(S / K) + (r - div + 0.5 * vol**2) * T) / (vol * np.sqrt(T))
-    d2 = d1 - vol * np.sqrt(T)
-    bs_price = (S * np.exp(-div * T) * norm.cdf(d1)
-                - K * np.exp(-r * T) * norm.cdf(d2))
+    dt_q = 0.25
+    f_annual = [float(np.sum(r_vec[4*n : 4*(n+1)]) * dt_q) for n in range(n_monitoring)]
 
-    # --- Monte Carlo ---
-    Z  = np.random.standard_normal(N_sim)
-    ST = S * np.exp((r - div - 0.5 * vol**2) * T + vol * np.sqrt(T) * Z)
-    mc_price = np.exp(-r * T) * np.mean(np.maximum(ST - K, 0.0))
+    # Total log-drift and log-vol over the full 4-year horizon
+    mu_e_4  = sum(f - div_enel - 0.5 * vol_enel**2 for f in f_annual)
+    mu_a_4  = sum(f - div_axa  - 0.5 * vol_axa**2  for f in f_annual)
+    sig_e_4 = vol_enel * np.sqrt(float(n_monitoring))
+    sig_a_4 = vol_axa  * np.sqrt(float(n_monitoring))
 
-    return bs_price, mc_price
+    cov = np.array([[sig_e_4**2,              rho * sig_e_4 * sig_a_4],
+                    [rho * sig_e_4 * sig_a_4, sig_a_4**2             ]])
+    Z = np.random.multivariate_normal([0.0, 0.0], cov, N_sim).T
+
+    # ln(E_s(T)/E_s(0)) for each simulated path
+    ln_ratio_enel = mu_e_4 + Z[0]
+    ln_ratio_axa  = mu_a_4 + Z[1]
+
+    # G_s = ratio^(1/N)  =>  ln G_s = ln_ratio / N
+    geom_enel = np.exp(ln_ratio_enel / n_monitoring)
+    geom_axa  = np.exp(ln_ratio_axa  / n_monitoring)
+
+    payoffs = alpha * np.maximum(0.0, np.sqrt(geom_enel * geom_axa) - 1.0)
+
+    price  = np.mean(payoffs) * D_0_4
+    stderr = np.std(payoffs, ddof=1) / np.sqrt(N_sim) * D_0_4
+    return price, stderr
+
+
+# ---------------------------------------------------------------------------
+# Convergence plot
+# ---------------------------------------------------------------------------
+
+def plot_geometric_basket_convergence(r_vec, D_0_4, alpha=0.95,
+                                       vol_enel=0.162, vol_axa=0.200,
+                                       div_enel=0.025, div_axa=0.029,
+                                       rho=0.40, n_monitoring=4,
+                                       N_values=None, n_reps=20,
+                                       base_seed=0,
+                                       save_path="geom_basket_convergence.png"):
+    """
+    Convergence study for the geometric basket MC pricer.
+
+    For each N in N_values, n_reps independent replications (different seeds)
+    are run and the sample mean plus a +/-2-sigma band across replications is
+    plotted against the closed-form reference line.
+
+    Because the geometric basket has an exact closed form, convergence of the
+    MC estimates toward that reference directly validates the simulation engine.
+
+    Parameters
+    ----------
+    N_values : list[int], optional
+        Simulation sizes to sweep. Defaults to a log-spaced grid 500 -> 100k.
+    n_reps : int
+        Independent replications per N level (drives error-bar width).
+    base_seed : int
+        Replication i uses seed = base_seed + i.
+    save_path : str
+        Destination path for the saved PNG figure.
+
+    Returns
+    -------
+    means, lows, highs : np.ndarray
+        Per-N mean and +/-2-sigma bounds across replications.
+    cf_price : float
+        Closed-form reference price.
+    """
+    if N_values is None:
+        N_values = [500, 1_000, 2_000, 5_000, 10_000, 30_000, 100_000]
+
+    cf_price = geometric_basket_closed_form(
+        r_vec, D_0_4, alpha, vol_enel, vol_axa,
+        div_enel, div_axa, rho, n_monitoring
+    )
+
+    means, lows, highs = [], [], []
+
+    for N in N_values:
+        rep_prices = np.array([
+            _simulate_geometric_basket_fast(
+                r_vec, D_0_4, alpha, vol_enel, vol_axa,
+                div_enel, div_axa, rho, n_monitoring,
+                N_sim=N, seed=base_seed + i
+            )[0]
+            for i in range(n_reps)
+        ])
+        m = np.mean(rep_prices)
+        s = np.std(rep_prices, ddof=1)
+        means.append(m)
+        lows.append(m - 2 * s)
+        highs.append(m + 2 * s)
+
+    means = np.array(means)
+    lows  = np.array(lows)
+    highs = np.array(highs)
+
+    # --- Plot ---
+    fig, ax = plt.subplots(figsize=(8, 4))
+
+    ax.fill_between(N_values, lows, highs, alpha=0.20, color="steelblue",
+                    label=r"MC mean $\pm 2\sigma$ (across replications)")
+    ax.errorbar(N_values, means,
+                yerr=[means - lows, highs - means],
+                fmt="o-", color="steelblue", capsize=4, linewidth=1.5,
+                label="MC mean (geometric basket)")
+    ax.axhline(cf_price, color="crimson", linestyle="--", linewidth=1.5,
+               label=f"Closed-form reference ({cf_price:.6f})")
+
+    ax.set_xscale("log")
+    ax.set_xlabel("N simulations")
+    ax.set_ylabel("Coupon PV")
+    ax.set_title("MC Convergence: geometric basket coupon vs closed-form")
+    ax.legend(fontsize=9)
+    ax.grid(True, which="both", linestyle=":", linewidth=0.6)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150)
+    plt.close(fig)
+    print(f"  Convergence plot saved to '{save_path}'")
+
+    return means, lows, highs, cf_price
+
+
+# ---------------------------------------------------------------------------
+# Main simulation entry point
+# ---------------------------------------------------------------------------
 
 def simulate_paths_and_coupon(r_vec, D_0_4, S0_enel=100.0, S0_axa=200.0,
                               vol_enel=0.162, vol_axa=0.200,
                               div_enel=0.025, div_axa=0.029,
                               rho=0.40, n_monitoring=4, alpha=0.95,
-                              N_sim=10000, seed=None, benchmark=False):
+                              N_sim=10_000, seed=None, benchmark=False):
     """
     Daily GBM simulation (256 business days/year), N=4 annual monitoring dates.
 
-    Basket return:
-        S(T) = (1/d) * sum_s [ (1/N) * sum_n  E_s(t_n) / E_s(t_{n-1}) ]
+    Basket return (arithmetic Asian):
+        B = (1/d) * sum_s [ (1/N) * sum_n  E_s(t_n) / E_s(t_{n-1}) ]  - 1
 
     Delta = 0 exactly by construction:
         Under GBM, if S0 -> lambda*S0, every ratio E_s(t_n)/E_s(t_{n-1})
         is unchanged (the lambda cancels). So the payoff distribution
-        is independent of S0 => Delta ≡ 0 analytically, not numerically.
+        is independent of S0 => Delta == 0 analytically, not numerically.
 
     Parameters
     ----------
+    r_vec : array-like, length 16
+        Quarterly forward rates (continuously compounded).
+    D_0_4 : float
+        Discount factor from today to maturity T=4y.
     benchmark : bool
-        If True, also print the geometric basket closed-form lower bound
-        for comparison with the MC price.
+        If True:
+          1. Prices the geometric basket on the SAME daily paths and compares
+             with the closed-form solution (point-estimate consistency check).
+          2. Runs a convergence study via fast terminal sampling across a range
+             of N values and saves a plot with +/-2-sigma confidence bands.
+        Both tests validate the MC engine without any auxiliary simulation.
     """
     if seed is not None:
         np.random.seed(seed)
 
-    dt             = 1.0 / BDAYS_YEAR
-    steps_per_year = BDAYS_YEAR
+    dt                = 1.0 / BDAYS_YEAR
+    steps_per_year    = BDAYS_YEAR
     steps_per_quarter = BDAYS_YEAR // 4
-    total_steps    = n_monitoring * steps_per_year   # 4 * 256 = 1024
+    total_steps       = n_monitoring * steps_per_year   # 4 * 256 = 1024
 
     corr_matrix = np.array([[1.0, rho],
                              [rho, 1.0]])
@@ -136,31 +317,39 @@ def simulate_paths_and_coupon(r_vec, D_0_4, S0_enel=100.0, S0_axa=200.0,
     discounted_coupon = calculate_asian_basket_coupon(monitor_prices, alpha, D_0_4)
 
     if benchmark:
-            # --- 1. European call sanity check ---
-            r_flat  = float(np.mean(r_vec))          # representative rate
-            bs, mc  = _benchmark_european_call(
-                S=100.0, K=100.0, T=1.0,
-                r=r_flat, vol=vol_enel,
-                div=div_enel, N_sim=500_000, seed=seed
-            )
-            print("\n--- MC Sanity Check: European Call on single asset ---")
-            print(f"  Black-Scholes price : {bs:.6f}")
-            print(f"  Monte Carlo price   : {mc:.6f}")
-            print(f"  Difference          : {abs(bs - mc):.6f}  "
-                  f"({'OK' if abs(bs-mc) < 0.005 else 'WARNING — check MC'})")
-            print(f"  Interpretation: arithmetic Asian basket has no closed form.")
-            print(f"  This test confirms the MC engine itself is correct.")
-    
-            # --- 2. Geometric basket lower bound ---
-            cf = geometric_basket_closed_form(
-                r_vec, D_0_4, alpha, vol_enel, vol_axa,
-                div_enel, div_axa, rho, n_monitoring
-            )
-            print(f"\n--- Benchmark: Geometric basket (closed-form lower bound) ---")
-            print(f"  MC price   (arithmetic basket) : {discounted_coupon:.6f}")
-            print(f"  Closed-form (geometric basket) : {cf:.6f}")
-            print(f"  Gap (arithmetic - geometric)   : {discounted_coupon - cf:.6f}")
-            print(f"  Interpretation: arithmetic >= geometric by Jensen inequality,")
-            print(f"  so the gap should be positive. If it is, both results are consistent.")
+        # ------------------------------------------------------------------
+        # 1. Point-estimate check: geometric basket on same paths vs closed-form
+        # ------------------------------------------------------------------
+        mc_geom = calculate_geometric_basket_coupon_mc(monitor_prices, alpha, D_0_4)
+        cf_geom = geometric_basket_closed_form(
+            r_vec, D_0_4, alpha, vol_enel, vol_axa,
+            div_enel, div_axa, rho, n_monitoring
+        )
+
+        print("\n--- Benchmark: geometric basket (MC on same paths vs closed-form) ---")
+        print(f"  MC price    (geometric basket) : {mc_geom:.6f}")
+        print(f"  Closed-form (geometric basket) : {cf_geom:.6f}")
+        print(f"  Difference  (MC - closed-form) : {mc_geom - cf_geom:.6f}")
+        print(f"  Interpretation: close agreement validates the MC engine.")
+        print(f"  The arithmetic basket (product) price is above by Jensen inequality:")
+        print(f"  MC price    (arithmetic basket): {discounted_coupon:.6f}")
+        print(f"  Gap (arithmetic - geometric)   : {discounted_coupon - mc_geom:.6f}"
+              f"  [should be > 0]")
+
+        # ------------------------------------------------------------------
+        # 2. Convergence study across N sizes (fast terminal sampler)
+        # ------------------------------------------------------------------
+        print("\n--- Convergence study: geometric basket MC vs closed-form ---")
+        print("  Running 20 replications per N level "
+              "across [500, 1k, 2k, 5k, 10k, 30k, 100k] ...")
+
+        plot_geometric_basket_convergence(
+            r_vec=r_vec, D_0_4=D_0_4, alpha=alpha,
+            vol_enel=vol_enel, vol_axa=vol_axa,
+            div_enel=div_enel, div_axa=div_axa,
+            rho=rho, n_monitoring=n_monitoring,
+            n_reps=20, base_seed=0,
+            save_path="geom_basket_convergence.png"
+        )
 
     return discounted_coupon, monitor_prices

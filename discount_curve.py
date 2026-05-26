@@ -115,7 +115,7 @@ print("Discount curve calculated successfully.")
 print("Interest rates at payment dates:")
 for date, discount in discount_curve_schedule.items():
     rate = getContinousInterestRate(discount, T=yearfrac(discount_curve_schedule.index[0], date, DC_CONV["INTERP"]))
-    print(f"Date: {date.date()}, Discount Factor: {discount:.6f}, Continuous Rate: {rate:.6%}") 
+    #print(f"Date: {date.date()}, Discount Factor: {discount:.6f}, Continuous Rate: {rate:.6%}") 
 
 plt.figure(figsize=(10, 5))
 plt.plot(discount_curve_schedule.index[:15], discount_curve_schedule.values[:15], marker="o", linestyle="-")
