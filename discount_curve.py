@@ -74,6 +74,24 @@ def calculate_curve():
     dt, df_depo, df_futures, df_swaps, settle = import_data(data_dir)
 
     dtSettle = dt.loc["Settlement", "TARGET"]
+    dtToday = dt.loc["Today", "TARGET"]
+    
+
+
+
+    try:
+        sn_maturity = dtSettle + pd.Timedelta(days=1)  # 2023-02-03
+        if sn_maturity not in df_depo.index:
+            raise KeyError(f"SN maturity {sn_maturity.date()} not found in df_depo.index")
+
+        r_sn_mid = 0.5 * (float(df_depo.loc[sn_maturity, "BID"]) + float(df_depo.loc[sn_maturity, "ASK"]))
+        tau_gap = yearfrac(dtToday, dtSettle, "ACT/360")
+        D_today_settle = 1.0 / (1.0 + r_sn_mid * tau_gap)
+    except Exception as e:
+        print("WARNING: could not compute D_today_settle from shortest deposit. "
+          "Falling back to 1.0. Error:", repr(e)) #should never fall into this exception but I0ll leve it just in case
+        D_today_settle = 1.0 
+
 
     # `df_futures` is already created in `import_data`; use first 7 points if needed
     if len(df_futures) > 7:
@@ -98,9 +116,12 @@ def calculate_curve():
         for d in payment_dates
     ]
 
+        # Convert P(Settle, T) -> P(Today, T) = P(Today, Settle) * P(Settle, T)
+    discounts_on_schedule = [D_today_settle * D for D in discounts_on_schedule]
+
     discount_curve_schedule = pd.Series(index=payment_dates, data=discounts_on_schedule)
 
-    return discount_curve_schedule
+    return discount_curve_schedule, D_today_settle, dtToday, dtSettle
 
 
 def getContinousInterestRate(D,T):
@@ -110,7 +131,7 @@ def getContinousInterestRate(D,T):
 
 
 print("Calculating discount curve...")
-discount_curve_schedule = calculate_curve()
+discount_curve_schedule, D_today_settle, dtToday, dtSettle = calculate_curve()
 print("Discount curve calculated successfully.")
 print("Interest rates at payment dates:")
 for date, discount in discount_curve_schedule.items():
