@@ -94,7 +94,7 @@ def main(N=1000000):
     print(f"Delta Upfront X% for Axa (S0=201): {delta_axa:.4f} ({delta_axa * 100:.2f}%)")
 
 
-    T_values = np.array([yearfrac(dtSettle, d, "ACT/365 FIXED") for d in dates]) #365 for interpolation purposes
+    T_values = np.array([yearfrac(dtSettle, d, "ACT/365 FIXED") for d in dates]) #act/365 for interpolation purposes
 
 
     bumped_discounts = np.array([
@@ -135,8 +135,9 @@ def main(N=1000000):
     print("\n--------------------------------Question 3--------------------------------")
     print("--- Hedging ---")
     
-    enel_NoF = abs(delta_enel)*N
-    axa_NoF = abs(delta_axa)*N
+    enel_NoF = -(delta_enel)*N
+    axa_NoF = -(delta_axa)*N
+
     dv01_upfront = (Upfront_X_bumped - Upfront_X)
 
     dv01_swap_1eur = sum(df * dt for df, dt in zip(discount_curve_schedule.values, dts))  * 0.0001

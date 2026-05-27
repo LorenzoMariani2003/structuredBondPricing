@@ -90,7 +90,7 @@ def calculate_curve():
 
     # Exact quarterly payment dates using Utilities.createSchedule from dtSettle = 2 Feb 2023
     periods = [f"{3*k}M" for k in range(1, 17)]
-    schedule_dates = createSchedule(dtSettle, periods, calendarCode="de.eurex", adjustmentRule="modfollow")
+    schedule_dates = createSchedule(dtSettle, periods, calendarCode="de.eurex", adjustmentRule="follow")
     payment_dates = [pd.Timestamp(d) for d in schedule_dates]
 
     discounts_on_schedule = [
