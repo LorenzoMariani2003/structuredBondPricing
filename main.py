@@ -13,7 +13,8 @@ from FinDates.daycount import yearfrac #todo check implementation of this yearfr
 def main(N=1000000):        
     print("--------------------------------Question 1--------------------------------")
     print("Discount Curve Calculation and Structured Bond Pricing\n")
-    discount_curve_schedule = calculate_curve()
+    discount_curve_schedule, D_today_settle, dtToday, dtStart = calculate_curve()
+    print(f"D(Today->Start) = {D_today_settle:.10f}")
     
     D_0_4 = discount_curve_schedule.iloc[-1]
     last_date = discount_curve_schedule.index[-1]
@@ -42,15 +43,17 @@ def main(N=1000000):
     dts = [yearfrac(dates[i-1],dates[i], "ACT/360") for i in range (1,len(dates))]
 
     dtSettle = pd.Timestamp("2023-02-02")
+    
+
     dt_first = yearfrac(dtSettle, dates[0], "ACT/360")
-    dts = [dt_first] + dts  # ora dts ha 16 elementi come discount_curve_schedule
+    dts = [dt_first] + dts  
 
     pv_spread = spread * sum(df * dt for df, dt in zip(discount_curve_schedule.values, dts))
     
 
     D_vals = discount_curve_schedule.values  # considering 16 discount factors
-    D_prev = np.concatenate([[1.0], D_vals[:-1]]) #todo not uqite sure on the 1 considering the contract starts 2 days after the stipulated date
-
+    D_prev = np.concatenate([[D_today_settle], D_vals[:-1]]) 
+    
     dts_years = np.array(dts)
 
     r_forward_quarterly = -np.log(D_vals / D_prev) / dts_years  
@@ -94,16 +97,27 @@ def main(N=1000000):
     print(f"Delta Upfront X% for Axa (S0=201): {delta_axa:.4f} ({delta_axa * 100:.2f}%)")
 
 
-    T_values = np.array([yearfrac(dtSettle, d, "ACT/365 FIXED") for d in dates]) #365 for interpolation purposes
-
+    T_values = np.array([yearfrac(dtSettle, d, "ACT/365 FIXED") for d in dates]) 
+    
 
     bumped_discounts = np.array([
     np.exp(-(-np.log(D) / T + 0.0001) * T)
     for D, T in zip(D_vals, T_values)])
         
     D_0_4_bumped = bumped_discounts[-1]
+    
+    T_settle = yearfrac(
+    dtToday,
+    dtSettle,
+    "ACT/365 FIXED"
+    )
 
-    D_prev_bumped = np.concatenate([[1.0], bumped_discounts[:-1]])
+    D_today_settle_bumped = np.exp(
+        -(-np.log(D_today_settle)/T_settle + 0.0001)
+        * T_settle
+    )
+
+    D_prev_bumped = np.concatenate([[D_today_settle_bumped], bumped_discounts[:-1]])
 
     r_forward_quarterly_bumped = -np.log(bumped_discounts / D_prev_bumped) / dts_years
 
@@ -137,8 +151,9 @@ def main(N=1000000):
     S0_enel = 100
     S0_axa = 200
     
-    enel_NoF = abs(delta_enel)*N/S0_enel
-    axa_NoF = abs(delta_axa)*N/S0_axa
+    enel_NoF = -(delta_enel)*N
+    axa_NoF = -(delta_axa)*N
+
     dv01_upfront = (Upfront_X_bumped - Upfront_X)
 
     dv01_swap_1eur = sum(df * dt for df, dt in zip(discount_curve_schedule.values, dts))  * 0.0001
