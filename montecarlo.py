@@ -9,18 +9,29 @@ BDAYS_YEAR = 256
 # Payoff helpers
 # ---------------------------------------------------------------------------
 
-def calculate_asian_basket_coupon(monitor_prices, alpha, D_0_4):
+def calculate_asian_basket_coupon(monitor_prices, alpha, D_0_4, use_t0_denominator=True):
     """
     Arithmetic Asian basket coupon from MC paths.
 
     Basket return:
-        B = 0.5 * mean_n(E_enel(t_n)/E_enel(t_{n-1}))
-          + 0.5 * mean_n(E_axa(t_n) /E_axa(t_{n-1}))
-          - 1
+        standard (use_t0_denominator=False):
+            B = 0.5 * mean_n(E_enel(t_n)/E_enel(t_{n-1}))
+              + 0.5 * mean_n(E_axa(t_n) /E_axa(t_{n-1}))
+              - 1
+        use_t0_denominator=True:
+            B = 0.5 * mean_n(E_enel(t_n)/E_enel(t_0))
+              + 0.5 * mean_n(E_axa(t_n) /E_axa(t_0))
+              - 1
     Coupon PV = alpha * E[max(0, B)] * D(0, T)
     """
-    ratios_enel = monitor_prices[0, 1:, :] / monitor_prices[0, :-1, :]
-    ratios_axa  = monitor_prices[1, 1:, :] / monitor_prices[1, :-1, :]
+    if use_t0_denominator:
+        S0_enel = monitor_prices[0, 0:1, :]   # shape (1, N_sim) — broadcasts over 4 dates
+        S0_axa  = monitor_prices[1, 0:1, :]
+        ratios_enel = monitor_prices[0, 1:, :] / S0_enel
+        ratios_axa  = monitor_prices[1, 1:, :] / S0_axa
+    else:
+        ratios_enel = monitor_prices[0, 1:, :] / monitor_prices[0, :-1, :]
+        ratios_axa  = monitor_prices[1, 1:, :] / monitor_prices[1, :-1, :]
 
     basket_return = (0.5 * np.mean(ratios_enel, axis=0)
                    + 0.5 * np.mean(ratios_axa,  axis=0)

@@ -134,9 +134,11 @@ def main(N=1000000):
 
     print("\n--------------------------------Question 3--------------------------------")
     print("--- Hedging ---")
+    S0_enel = 100
+    S0_axa = 200
     
-    enel_NoF = abs(delta_enel)*N
-    axa_NoF = abs(delta_axa)*N
+    enel_NoF = abs(delta_enel)*N/S0_enel
+    axa_NoF = abs(delta_axa)*N/S0_axa
     dv01_upfront = (Upfront_X_bumped - Upfront_X)
 
     dv01_swap_1eur = sum(df * dt for df, dt in zip(discount_curve_schedule.values, dts))  * 0.0001
