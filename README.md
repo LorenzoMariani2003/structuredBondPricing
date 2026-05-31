@@ -86,7 +86,7 @@ This is iterated for each new swap maturity, extending the curve one pillar at a
 
 #### Final schedule interpolation
 
-The 16 quarterly payment dates $\{t_1, \ldots, t_{16}\}$ for the structured note are generated with a **Modified Following** business day convention on the Eurex DE calendar. Discount factors on these exact dates are obtained by the same continuous zero-rate linear interpolation described above.
+The 4  payment dates $\{t_1, \ldots, t_{4}\}$ for the structured note are generated with a **Modified Following** business day convention on the Eurex DE calendar. Discount factors on these exact dates are obtained by the same continuous zero-rate linear interpolation described above.
 
 ---
 

@@ -2,14 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 
-BDAYS_YEAR = 256
+
 
 
 # ---------------------------------------------------------------------------
 # Payoff helpers
 # ---------------------------------------------------------------------------
 
-def calculate_asian_basket_coupon(monitor_prices, alpha, D_0_4, use_t0_denominator=True):
+def calculate_asian_basket_coupon(monitor_prices, alpha, D_0_4, use_t0_denominator=False):
     """
     Arithmetic Asian basket coupon from MC paths.
 
@@ -257,10 +257,34 @@ def plot_geometric_basket_convergence(r_vec, D_0_4, alpha=0.95,
 
     return means, lows, highs, cf_price
 
+# In montecarlo.py o in discount_curve.py
 
+from Utilities import Calendar
+
+def count_business_days(year: int, calendar_code: str = "de.eurex") -> int:
+    """Used to count business days in a given year according to the specified calendar."""
+    import datetime
+    cal = Calendar(calendar_code)
+    count = 0
+    day = datetime.date(year, 1, 1)
+    while day.year == year:
+        if not cal.is_holiday(day):
+            count += 1
+        day += datetime.timedelta(days=1)
+    return count
+
+def avg_business_days(start_year: int, n_years: int = 4, 
+                      calendar_code: str = "de.eurex") -> float:
+    """Avg business days per year over a range of years, used for discounting in the MC simulation."""
+    counts = [count_business_days(start_year + i, calendar_code) 
+              for i in range(n_years)]
+    return sum(counts) / len(counts)
 # ---------------------------------------------------------------------------
 # Main simulation entry point
 # ---------------------------------------------------------------------------
+
+BDAYS_YEAR = round(avg_business_days(2023, n_years=4))
+print(f"Average business days per year (2023-2026, de.eurex calendar): {BDAYS_YEAR}")
 
 def simulate_paths_and_coupon(r_vec, D_0_4, S0_enel=100.0, S0_axa=200.0,
                               vol_enel=0.162, vol_axa=0.200,
