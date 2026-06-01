@@ -10,7 +10,7 @@ from montecarlo import simulate_paths_and_coupon
 
 from FinDates.daycount import yearfrac #todo check implementation of this yearfrac, I assumed them to be correct _tom
 
-def main(N=1000000):        
+def main(Notional=1000000):        
     print("--------------------------------Question 1--------------------------------")
     print("Discount Curve Calculation and Structured Bond Pricing\n")
     discount_curve_schedule, D_today_settle, dtToday, dtStart = calculate_curve()
@@ -170,4 +170,4 @@ def main(N=1000000):
 
     print("\n--------------------------------Some checks--------------------------------")
     pv_coupon_closed_form, _ = simulate_paths_and_coupon(r_vec=r_forward_quarterly, D_0_4=D_0_4, N_sim=100000, seed=seed, benchmark=True)
-if __name__ == "__main__":    main(N = 1000000)
+if __name__ == "__main__":    main(Notional = 1000000)
