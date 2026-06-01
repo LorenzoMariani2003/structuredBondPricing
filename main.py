@@ -10,6 +10,10 @@ from montecarlo import simulate_paths_and_coupon
 
 from FinDates.daycount import yearfrac #todo check implementation of this yearfrac, I assumed them to be correct _tom
 
+
+
+BENCHMARK_OUTPUT = True
+
 def main(Notional=1000000):        
     print("--------------------------------Question 1--------------------------------")
     print("Discount Curve Calculation and Structured Bond Pricing\n")
@@ -151,23 +155,23 @@ def main(Notional=1000000):
     S0_enel = 100
     S0_axa = 200
     
-    enel_NoF = -(delta_enel)*N
-    axa_NoF = -(delta_axa)*N
+    enel_NoS = -(delta_enel)*Notional
+    axa_NoS = -(delta_axa)*Notional
 
     dv01_upfront = (Upfront_X_bumped - Upfront_X)
 
     dv01_swap_1eur = sum(df * dt for df, dt in zip(discount_curve_schedule.values, dts))  * 0.0001
 
-    swap_notional = N*abs(dv01_upfront) / dv01_swap_1eur
+    swap_notional = Notional*abs(dv01_upfront) / dv01_swap_1eur
     
-    print(f"Hedge Delta ENEL: Buy {enel_NoF:.6f} shares per {N} EUR notional")
-    print(f"Hedge Delta AXA:  Buy {axa_NoF:.6f} shares per {N} EUR notional")
+    print(f"Hedge Delta ENEL: Buy {enel_NoS:.6f} shares per {Notional} EUR notional")
+    print(f"Hedge Delta AXA:  Buy {axa_NoS:.6f} shares per {Notional} EUR notional")
     if dv01_upfront > 0:
-            print(f"Hedge IR Risk:    Enter a Receiver IRS (pay 3m Euribor, receive fixed) with Notional = {swap_notional:.4f} EUR per {N} EUR notional")
+            print(f"Hedge IR Risk:    Enter a Receiver IRS (pay 3m Euribor, receive fixed) with Notional = {swap_notional:.4f} EUR per {Notional} EUR notional")
     else:
-        print(f"Hedge IR Risk:    Enter a Payer IRS (receive 3m Euribor, pay fixed) with Notional = {swap_notional:.4f} EUR per {N} EUR notional")
+        print(f"Hedge IR Risk:    Enter a Payer IRS (receive 3m Euribor, pay fixed) with Notional = {swap_notional:.4f} EUR per {Notional} EUR notional")
 
-
-    print("\n--------------------------------Some checks--------------------------------")
-    pv_coupon_closed_form, _ = simulate_paths_and_coupon(r_vec=r_forward_quarterly, D_0_4=D_0_4, N_sim=100000, seed=seed, benchmark=True)
+    if BENCHMARK_OUTPUT:
+        print("\n--------------------------------Some checks--------------------------------")
+        pv_coupon_closed_form, _ = simulate_paths_and_coupon(r_vec=r_forward_quarterly, D_0_4=D_0_4, N_sim=100000, seed=seed, benchmark=True)
 if __name__ == "__main__":    main(Notional = 1000000)
